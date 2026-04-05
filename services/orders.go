@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -14,10 +13,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hudl/fargo"
+	"github.com/razorpay/razorpay-go"
 	"github.com/risbern21/ecom/orders/internal/cache"
 	"github.com/risbern21/ecom/orders/internal/config"
 	"github.com/risbern21/ecom/orders/internal/dto"
-	"github.com/risbern21/ecom/orders/internal/kafka"
 	"github.com/risbern21/ecom/orders/internal/token"
 	"github.com/risbern21/ecom/orders/models"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -25,8 +24,8 @@ import (
 
 type OrderService struct {
 	UserClaims       *token.UserClaims
-	OrderReqeustDTO  dto.OrderReqeustDTO
-	OrderResponseDTO dto.OrderResponseDTO
+	OrderReqeustDTO  dto.OrderReqeust
+	OrderResponseDTO dto.OrderResponse
 }
 
 func New() *OrderService {
@@ -42,7 +41,7 @@ func GetServiceURL(conn fargo.EurekaConnection, serviceName string) (string, err
 	return fmt.Sprintf("http://%s:%d", instance.HostName, instance.Port), nil
 }
 
-func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponseDTO, error) {
+func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponse, error) {
 	var url string
 	var err error
 
@@ -105,7 +104,7 @@ func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponseDTO, e
 		return nil, err
 	}
 
-	orderResponseDTO := &dto.OrderResponseDTO{}
+	orderResponseDTO := &dto.OrderResponse{}
 
 	orderResponseDTO.ID = m.ID
 	orderResponseDTO.CustomerID = m.CustomerID
@@ -116,13 +115,29 @@ func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponseDTO, e
 	orderResponseDTO.IsPaid = m.IsPaid
 	orderResponseDTO.IsDelivered = m.IsDelivered
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := kafka.Client().Publish(ctx, kafka.TopicOrderCreated.String(), m.ID.String(), m.OrderItems); err != nil {
-			log.Println("error occurred while publishing", err)
-		}
-	}()
+	// go func() {
+	// 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// 	defer cancel()
+	// 	if err := kafka.Client().Publish(ctx, kafka.TopicOrderCreated.String(), m.ID.String(), m.OrderItems); err != nil {
+	// 		log.Println("error occurred while publishing", err)
+	// 	}
+	// }()
+	//
+	rzpClient := razorpay.NewClient(config.Config().RazorpayKeyID, config.Config().RazorpaySecret)
+
+	data := map[string]any{
+		"amount":   5000,
+		"currency": o.OrderReqeustDTO.Currency,
+		"receipt":  "order_" + strconv.FormatInt(time.Now().Unix(), 10),
+	}
+
+	rzpOrder, err := rzpClient.Order.Create(data, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	o.OrderResponseDTO.RzpID = rzpOrder["id"].(string)
+	fmt.Printf("order status is :%v\n\n\n", rzpOrder["status"].(string))
 
 	return orderResponseDTO, nil
 }
@@ -151,7 +166,7 @@ func (o *OrderService) GetOrderByID(id primitive.ObjectID) error {
 	return nil
 }
 
-func (o *OrderService) GetOrdersByCustomerID() ([]dto.OrderResponseDTO, error) {
+func (o *OrderService) GetOrdersByCustomerID() ([]dto.OrderResponse, error) {
 	m := models.New()
 	m.CustomerID = o.UserClaims.ID
 
@@ -160,10 +175,10 @@ func (o *OrderService) GetOrdersByCustomerID() ([]dto.OrderResponseDTO, error) {
 		return nil, err
 	}
 
-	var orderResponses []dto.OrderResponseDTO
+	var orderResponses []dto.OrderResponse
 
 	for _, v := range orders {
-		orderResponse := dto.OrderResponseDTO{}
+		orderResponse := dto.OrderResponse{}
 
 		orderResponse.ID = v.ID
 		orderResponse.CustomerID = v.CustomerID

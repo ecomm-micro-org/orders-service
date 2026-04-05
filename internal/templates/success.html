@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Payment Successful</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .success-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .success-title {
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+
+        .payment-details {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .detail-item {
+            margin: 10px 0;
+            padding: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .detail-value {
+            color: #6c757d;
+            word-break: break-all;
+        }
+
+        .back-button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            display: inline-block;
+            margin-top: 20px;
+        }
+
+        .back-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="success-container">
+        <h1 class="success-title">Payment Successful!</h1>
+        <p>Thank you for your payment. Your transaction has been completed successfully.</p>
+
+        <div class="payment-details">
+            <h3>Payment Details:</h3>
+            <div class="detail-item">
+                <span class="detail-label">Order ID:</span><br>
+                <span class="detail-value" id="orderId">{{.OrderID}}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Payment ID:</span><br>
+                <span class="detail-value" id="paymentId">{{.PaymentID}}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Signature:</span><br>
+                <span class="detail-value" id="signature">{{.Signature}}</span>
+            </div>
+        </div>
+
+        <a href="/" class="back-button">Make Another Payment</a>
+    </div>
+
+    <script>
+        // Get parameters from URL as fallback
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('orderId');
+        const paymentId = urlParams.get('paymentId');
+        const signature = urlParams.get('signature');
+
+        // Display the values if template didn't populate them
+        if (orderId && !document.getElementById('orderId').textContent) {
+            document.getElementById('orderId').textContent = orderId;
+        }
+        if (paymentId && !document.getElementById('paymentId').textContent) {
+            document.getElementById('paymentId').textContent = paymentId;
+        }
+        if (signature && !document.getElementById('signature').textContent) {
+            document.getElementById('signature').textContent = signature;
+        }
+    </script>
+</body>
+
+</html>

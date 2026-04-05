@@ -17,6 +17,7 @@ type Order struct {
 	Address       string             `bson:"address" json:"address"`
 	Pincode       string             `bson:"pincode" json:"pincode"`
 	CheckoutTotal float64            `bson:"checkout_total" json:"checkout_total"`
+	Currency      string             `bson:"currency" json:"currency"`
 	IsPaid        bool               `bson:"is_paid" json:"is_paid"`
 	IsDelivered   bool               `bson:"is_delivered" json:"is_delivered"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`

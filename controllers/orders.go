@@ -6,6 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/razorpay/razorpay-go/utils"
+	"github.com/risbern21/ecom/orders/internal/config"
 	"github.com/risbern21/ecom/orders/internal/dto"
 	"github.com/risbern21/ecom/orders/internal/token"
 	"github.com/risbern21/ecom/orders/services"
@@ -33,8 +35,14 @@ func extractAccessToken(c fiber.Ctx) (string, error) {
 	return accessToken, nil
 }
 
+func (con *Controller) GetKey(c fiber.Ctx) error {
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"key": config.Config().RazorpayKeyID,
+	})
+}
+
 func (con *Controller) CreateOrder(c fiber.Ctx) error {
-	var orderRequestDTO dto.OrderReqeustDTO
+	var orderRequestDTO dto.OrderReqeust
 
 	if err := c.Bind().Body(&orderRequestDTO); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(err.Error())
@@ -59,6 +67,25 @@ func (con *Controller) CreateOrder(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(o)
+}
+
+func (con *Controller) PaymentCallback(c fiber.Ctx) error {
+	razorpayOrderID := c.FormValue("razorpay_order_id")
+	razorpayPaymentID := c.FormValue("razorpay_payment_id")
+	razorpaySignature := c.FormValue("razorpay_signature")
+
+	params := map[string]any{
+		"razorpay_order_id":   razorpayOrderID,
+		"razorpay_payment_id": razorpayPaymentID,
+	}
+
+	isValid := utils.VerifyPaymentSignature(params, razorpaySignature, config.Config().RazorpaySecret)
+
+	if !isValid {
+		return c.Redirect().To("/failure.html")
+	}
+
+	return c.Redirect().To("/success.html?orderId=" + razorpayOrderID + "&paymentId=" + razorpayPaymentID + "&signature=" + razorpaySignature)
 }
 
 func (con *Controller) GetOrderByID(c fiber.Ctx) error {
@@ -178,4 +205,22 @@ func (con *Controller) CancelOrder(c fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (con *Controller) PaymentSuccess(c fiber.Ctx) error {
+	rzpOrderID := c.Query("orderId")
+	paymentID := c.Query("paymentId")
+	signature := c.Query("signature")
+
+	data := fiber.Map{
+		"OrderID":   rzpOrderID,
+		"PaymentID": paymentID,
+		"Signature": signature,
+	}
+
+	return c.Render("success", data)
+}
+
+func (con *Controller) PaymentFailure(c fiber.Ctx) error {
+	return c.Render("failure", nil)
 }

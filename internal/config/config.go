@@ -19,6 +19,8 @@ type config struct {
 	CachePasswd     string
 	ServiceRegistry string
 	EurekaHostname  string
+	RazorpayKeyID   string
+	RazorpaySecret  string
 }
 
 func Init() {
@@ -32,6 +34,8 @@ func Init() {
 			CachePasswd:     os.Getenv("CACHE_PASSWD"),
 			ServiceRegistry: os.Getenv("SERVICE_REGISTRY"),
 			EurekaHostname:  os.Getenv("EUREKA_HOSTNAME"),
+			RazorpayKeyID:   os.Getenv("RAZORPAY_KEY_ID"),
+			RazorpaySecret:  os.Getenv("RAZORPAY_SECRET"),
 		}
 	})
 }
