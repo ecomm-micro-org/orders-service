@@ -7,7 +7,6 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
-	"github.com/gofiber/template/html/v2"
 	"github.com/risbern21/ecom/orders/controllers"
 	"github.com/risbern21/ecom/orders/internal/kafka"
 	"github.com/risbern21/ecom/orders/routes"
@@ -43,7 +42,6 @@ func SetUp() {
 	config := fiber.Config{
 		BodyLimit:    10 * 1024 * 1024,
 		ErrorHandler: errorHandler,
-		Views:        html.New("./internal/templates", ".html"),
 	}
 
 	app = fiber.New(config)

@@ -16,41 +16,97 @@
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script>
         function makePayment() {
-            const amount = document.getElementById('amount').value;
-
-            fetch('/create-order', {
+            fetch('/orders/create', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJJRCI6IjZhNzY1ZWM5LTg5YzYtNDgzZC04MmU3LTBkNzlkNTNmZjI5MSIsImVtYWlsIjoiTWFyaW5hX1dhbHNoQHlhaG9vLmNvbSIsInJvbGUiOiJjdXN0b21lciIsInN1YiI6Ik1hcmluYV9XYWxzaEB5YWhvby5jb20iLCJleHAiOjE3NzU0OTEwMTQsImlhdCI6MTc3NTQ5MDExNCwianRpIjoiZWEyYjY0YjMtN2E3Mi00NzNhLThjMzYtNjgyN2I1YTYyM2U2In0.gyNzDN9nu6m_vA2oFWGQEwkFbB2z5K8CDFxhuumb3po"
                 },
                 body: JSON.stringify({
-                    amount: parseInt(amount),
-                    currency: 'INR'
+                    order_items: [
+                        {
+                            product_id: 2,
+                            quantity: 2,
+                        }
+                    ],
+                    address: "Virar West, Mumbai",
+                    pincode: "401303",
+                    currency: "INR"
                 })
             })
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(order => {
-                    fetch('/get-key')
-                        .then(response => response.json())
-                        .then(keyData => {
-                            const options = {
-                                "key": keyData.key,
-                                "amount": order.amount,
-                                "currency": order.currency,
-                                "name": "Your Company",
-                                "description": "Payment for your product",
-                                "order_id": order.id,
-                                "callback_url": "/payment-callback",
-                                "prefill": {
-                                    "name": "User Name",
-                                    "email": "user@example.com",
-                                }
-                            };
+                    console.log(order)
+                    return fetch('/orders/get-key', {
+                        method: "GET",
+                        headers: {
+                            'Content-Type': 'application/json',
+                            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJJRCI6IjZhNzY1ZWM5LTg5YzYtNDgzZC04MmU3LTBkNzlkNTNmZjI5MSIsImVtYWlsIjoiTWFyaW5hX1dhbHNoQHlhaG9vLmNvbSIsInJvbGUiOiJjdXN0b21lciIsInN1YiI6Ik1hcmluYV9XYWxzaEB5YWhvby5jb20iLCJleHAiOjE3NzU0OTEwMTQsImlhdCI6MTc3NTQ5MDExNCwianRpIjoiZWEyYjY0YjMtN2E3Mi00NzNhLThjMzYtNjgyN2I1YTYyM2U2In0.gyNzDN9nu6m_vA2oFWGQEwkFbB2z5K8CDFxhuumb3po"
+                        },
+                    })
+                        .then(res => res.json())
+                        .then(keyData => ({ order, keyData }));
+                })
+                .then(({ order, keyData }) => {
+                    const options = {
+                        key: keyData.key,
 
-                            const rzp1 = new Razorpay(options);
-                            rzp1.open();
-                        });
+                        // ⚠️ Razorpay expects amount in paise
+                        amount: order.checkout_total * 100,
+
+                        currency: order.currency,
+
+                        name: "Your Company",
+                        description: "Payment for your product",
+
+                        // ⚠️ Must be Razorpay order id (rzp_id)
+                        order_id: order.rzp_id,
+
+                        callback_url: "/orders/payment-callback",
+
+                        prefill: {
+                            name: "User Name",
+                            email: "user@example.com"
+                        }
+                    };
+
+                    const rzp1 = new Razorpay(options);
+                    rzp1.open();
                 });
+            // fetch('/create', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //   "Authorization":""
+            //     },
+            //     body: JSON.stringify({
+            //         Username:
+            //         currency: 'INR'
+            //     })
+            // })
+            //     .then(response => response.json())
+            //     .then(order => {
+            //         fetch('/get-key')
+            //             .then(response => response.json())
+            //             .then(keyData => {
+            //                 const options = {
+            //                     "key": keyData.key,
+            //                     "amount": order.amount,
+            //                     "currency": order.currency,
+            //                     "name": "Your Company",
+            //                     "description": "Payment for your product",
+            //                     "order_id": order.id,
+            //                     "callback_url": "/payment-callback",
+            //                     "prefill": {
+            //                         "name": "User Name",
+            //                         "email": "user@example.com",
+            //                     }
+            //                 };
+            //
+            //                 const rzp1 = new Razorpay(options);
+            //                 rzp1.open();
+            //             });
+            //     });
         }
     </script>
 </body>

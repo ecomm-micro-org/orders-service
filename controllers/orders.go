@@ -36,6 +36,16 @@ func extractAccessToken(c fiber.Ctx) (string, error) {
 }
 
 func (con *Controller) GetKey(c fiber.Ctx) error {
+	accessToken, err := extractAccessToken(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(err)
+	}
+
+	_, err = con.extractor.ExtractUserClaims(accessToken)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(err)
+	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"key": config.Config().RazorpayKeyID,
 	})
@@ -82,10 +92,10 @@ func (con *Controller) PaymentCallback(c fiber.Ctx) error {
 	isValid := utils.VerifyPaymentSignature(params, razorpaySignature, config.Config().RazorpaySecret)
 
 	if !isValid {
-		return c.Redirect().To("/failure.html")
+		return c.Redirect().To("/orders/failure.html")
 	}
 
-	return c.Redirect().To("/success.html?orderId=" + razorpayOrderID + "&paymentId=" + razorpayPaymentID + "&signature=" + razorpaySignature)
+	return c.Redirect().To("/orders/success.html?orderId=" + razorpayOrderID + "&paymentId=" + razorpayPaymentID + "&signature=" + razorpaySignature)
 }
 
 func (con *Controller) GetOrderByID(c fiber.Ctx) error {
