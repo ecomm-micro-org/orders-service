@@ -12,8 +12,8 @@ import (
 
 var client *mongo.Client
 
-func Coll() *mongo.Collection {
-	return client.Database("ordersDB").Collection("orders")
+func Client() *mongo.Client {
+	return client
 }
 
 func Connect() {

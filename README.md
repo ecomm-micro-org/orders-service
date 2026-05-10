@@ -16,8 +16,8 @@ A microservice responsible for managing the full lifecycle of customer orders wi
 │                      Orders Service                             │
 │                                                                 │
 │   ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-│   │   Fiber     │───▶│  Controller  │───▶│    Use Cases     │  │
-│   │   Router    │    │   Layer      │    │    / Services    │  │
+│   │   Fiber     │───▶│  Controller  │───▶│     Services     │  │
+│   │   Router    │    │   Layer      │    │                  │  │
 │   └─────────────┘    └──────────────┘    └────────┬─────────┘  │
 │                                                   │            │
 │                          ┌────────────────────────┤            │

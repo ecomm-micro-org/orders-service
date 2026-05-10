@@ -21,3 +21,7 @@ func Connect() {
 		DB:       0,
 	})
 }
+
+func Disconnect() error {
+	return rdb.Close()
+}

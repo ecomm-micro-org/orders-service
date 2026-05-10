@@ -1,0 +1,317 @@
+basePath: /
+definitions:
+  controllers.ErrorMsg:
+    properties:
+      message:
+        type: string
+    type: object
+  dto.OrderItem:
+    properties:
+      product_id:
+        type: integer
+      quantity:
+        type: integer
+    required:
+    - product_id
+    - quantity
+    type: object
+  dto.OrderRequest:
+    properties:
+      address:
+        type: string
+      currency:
+        type: string
+      order_items:
+        items:
+          $ref: '#/definitions/dto.OrderItem'
+        type: array
+      pincode:
+        type: string
+    required:
+    - address
+    - currency
+    - order_items
+    - pincode
+    type: object
+  dto.OrderResponse:
+    properties:
+      address:
+        type: string
+      checkout_total:
+        type: number
+      currency:
+        type: string
+      customer_id:
+        type: string
+      id:
+        type: string
+      is_delivered:
+        type: boolean
+      is_paid:
+        type: boolean
+      order_items:
+        items:
+          $ref: '#/definitions/dto.OrderItem'
+        type: array
+      pincode:
+        type: string
+      rzp_id:
+        type: string
+    type: object
+host: localhost:42067
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is a orders server for ecomm micro project
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: orders microservice API
+  version: "1.0"
+paths:
+  /orders/create:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new order for the authenticated customer and returns
+        a Razorpay order to complete payment. Requires a valid JWT bearer token.
+      parameters:
+      - description: Bearer <token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Order details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.OrderRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+      summary: Create order
+      tags:
+      - orders
+  /orders/get-key:
+    get:
+      description: Returns the Razorpay public key ID. Requires a valid JWT bearer
+        token.
+      parameters:
+      - description: Bearer <token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+      summary: Get Razorpay key
+      tags:
+      - payments
+  /orders/get_my_orders:
+    get:
+      description: Returns all orders belonging to the currently authenticated customer.
+        Requires a valid JWT bearer token.
+      parameters:
+      - description: Bearer <token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.OrderResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+      summary: Get my orders
+      tags:
+      - orders
+  /orders/order/{id}:
+    get:
+      description: Fetches a single order by its MongoDB ObjectID. Requires a valid
+        JWT bearer token.
+      parameters:
+      - description: Bearer <token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Order ID (MongoDB ObjectID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.OrderResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+      summary: Get order by ID
+      tags:
+      - orders
+    put:
+      consumes:
+      - application/json
+      description: Updates the delivery address for a specific order. Only the owner
+        of the order may do this. Requires a valid JWT bearer token.
+      parameters:
+      - description: Bearer <token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Order ID (MongoDB ObjectID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New delivery address
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+      summary: Update delivery address
+      tags:
+      - orders
+  /orders/order/{order_id}:
+    delete:
+      description: Cancels a specific order. Only the owner of the order can cancel
+        it. Requires a valid JWT bearer token.
+      parameters:
+      - description: Bearer <token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Order ID (MongoDB ObjectID)
+        in: path
+        name: order_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/controllers.ErrorMsg'
+      summary: Cancel an order
+      tags:
+      - orders
+  /orders/payment-callback:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Receives the Razorpay payment callback form post, verifies the
+        HMAC signature, and redirects to success or failure page.
+      parameters:
+      - description: Razorpay Order ID
+        in: formData
+        name: razorpay_order_id
+        required: true
+        type: string
+      - description: Razorpay Payment ID
+        in: formData
+        name: razorpay_payment_id
+        required: true
+        type: string
+      - description: Razorpay Signature
+        in: formData
+        name: razorpay_signature
+        required: true
+        type: string
+      responses:
+        "302":
+          description: Found
+      summary: Razorpay payment callback
+      tags:
+      - payments
+swagger: "2.0"

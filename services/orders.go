@@ -18,23 +18,50 @@ import (
 	"github.com/google/uuid"
 	"github.com/hudl/fargo"
 	"github.com/razorpay/razorpay-go"
-	"github.com/risbern21/ecom/orders/internal/cache"
 	"github.com/risbern21/ecom/orders/internal/config"
 	"github.com/risbern21/ecom/orders/internal/dto"
 	"github.com/risbern21/ecom/orders/internal/kafka"
+	"github.com/risbern21/ecom/orders/internal/notifications"
 	"github.com/risbern21/ecom/orders/internal/token"
 	"github.com/risbern21/ecom/orders/models"
+	"github.com/risbern21/ecom/orders/store"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+const (
+	orderCreated = "Your order has been created."
+	// addressUpdated = "Your address has been successfully updated."
+)
+
 type OrderService struct {
-	UserClaims       *token.UserClaims
-	OrderReqeustDTO  dto.OrderReqeust
-	OrderResponseDTO dto.OrderResponse
+	store      store.Storer
+	eurekaConn fargo.EurekaConnection
+	RzpClient  *razorpay.Client
+	Notifier   *notifications.Notifier
 }
 
-func New() *OrderService {
-	return &OrderService{}
+func NewOrderService(rzpClient *razorpay.Client, notifier *notifications.Notifier, s store.Storer, eurekaConn fargo.EurekaConnection) *OrderService {
+	return &OrderService{
+		Notifier:   notifier,
+		store:      s,
+		eurekaConn: eurekaConn,
+		RzpClient:  rzpClient,
+	}
+}
+
+func NewOrderServiceWithRepo(s store.Storer) *OrderService {
+	serviceRegistry := config.Config().ServiceRegistry
+
+	return &OrderService{
+		store:      s,
+		eurekaConn: fargo.NewConn(serviceRegistry),
+	}
+}
+
+func NewWithEurekaConn(c fargo.EurekaConnection) *OrderService {
+	return &OrderService{
+		eurekaConn: c,
+	}
 }
 
 func getReliableServiceURL(eurekaConn fargo.EurekaConnection, appName string) (string, error) {
@@ -90,37 +117,35 @@ func isReachable(rawURL string) bool {
 	return true
 }
 
-func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponse, error) {
+func (o *OrderService) CreateOrder(accessToken string, userClaims *token.UserClaims, orderRequest *dto.OrderRequest) (*dto.OrderResponse, error) {
 	var url string
 	var err error
 
-	ctx1, cancel1 := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel1()
+	// ctx1, cancel1 := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	// defer cancel1()
 
-	url, err = cache.Client().Get(ctx1, "PRODUCTS-SERVICE").Result()
-	if err != nil {
-		serviceRegistry := config.Config().ServiceRegistry
-		eurekaConn := fargo.NewConn(serviceRegistry)
+	// url, err = cache.Client().Get(ctx1, "PRODUCTS-SERVICE").Result()
+	// if err != nil {
 
-		// Retry up to 3 times — Eureka can be flaky on first call
-		for attempt := 1; attempt <= 3; attempt++ {
-			url, err = getReliableServiceURL(eurekaConn, "PRODUCTS-SERVICE")
-			if err == nil {
-				break
-			}
-			log.Printf("attempt %d: failed to resolve PRODUCTS-SERVICE: %v", attempt, err)
-			time.Sleep(time.Duration(attempt) * 100 * time.Millisecond) // backoff
+	// Retry up to 3 times — Eureka can be flaky on first call
+	for attempt := 1; attempt <= 3; attempt++ {
+		url, err = getReliableServiceURL(o.eurekaConn, "PRODUCTS-SERVICE")
+		if err == nil {
+			break
 		}
-		if err != nil || url == "" {
-			return nil, fmt.Errorf("could not resolve PRODUCTS-SERVICE after retries: %w", err)
-		}
-
-		ctx2, cancel2 := context.WithTimeout(context.Background(), 300*time.Millisecond)
-		defer cancel2()
-		cache.Client().Set(ctx2, "PRODUCTS-SERVICE", url, 2*time.Minute)
+		log.Printf("attempt %d: failed to resolve PRODUCTS-SERVICE: %v", attempt, err)
+		time.Sleep(time.Duration(attempt) * 100 * time.Millisecond) // backoff
+	}
+	if err != nil || url == "" {
+		return nil, fmt.Errorf("could not resolve PRODUCTS-SERVICE after retries: %w", err)
 	}
 
-	body, err := json.Marshal(o.OrderReqeustDTO.OrderItems)
+	// 	ctx2, cancel2 := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	// 	defer cancel2()
+	// 	cache.Client().Set(ctx2, "PRODUCTS-SERVICE", url, 10*time.Second)
+	// }
+	//
+	body, err := json.Marshal(orderRequest.OrderItems)
 	if err != nil {
 		return nil, err
 	}
@@ -150,30 +175,43 @@ func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponse, erro
 		return nil, err
 	}
 
-	m := models.New()
+	m := models.NewOrder()
 	m.ID = primitive.NewObjectID()
-	m.CustomerID = o.UserClaims.ID
-	m.Address = o.OrderReqeustDTO.Address
-	m.Pincode = o.OrderReqeustDTO.Pincode
-	m.OrderItems = o.OrderReqeustDTO.OrderItems
+	m.CustomerID = userClaims.ID
+	m.Address = orderRequest.Address
+	m.Pincode = orderRequest.Pincode
+	m.OrderItems = orderRequest.OrderItems
 	m.CheckoutTotal = checkoutTotal
-	m.Currency = o.OrderReqeustDTO.Currency
+	m.Currency = orderRequest.Currency
 
-	if err := m.CreateOrder(); err != nil {
+	data := map[string]any{
+		"amount":   m.CheckoutTotal,
+		"currency": orderRequest.Currency,
+		"receipt":  "order_" + strconv.FormatInt(time.Now().Unix(), 10),
+	}
+
+	rzpOrder, err := o.RzpClient.Order.Create(data, nil)
+	if err != nil {
 		return nil, err
 	}
 
-	orderResponseDTO := &dto.OrderResponse{}
+	m.RzpID = rzpOrder["id"].(string)
 
-	orderResponseDTO.ID = m.ID
-	orderResponseDTO.CustomerID = m.CustomerID
-	orderResponseDTO.OrderItems = m.OrderItems
-	orderResponseDTO.Address = m.Address
-	orderResponseDTO.CheckoutTotal = checkoutTotal
-	orderResponseDTO.Pincode = m.Pincode
-	orderResponseDTO.IsPaid = m.IsPaid
-	orderResponseDTO.IsDelivered = m.IsDelivered
-	orderResponseDTO.Currency = m.Currency
+	if err := o.store.CreateOrder(m); err != nil {
+		return nil, err
+	}
+
+	orderResponse := &dto.OrderResponse{}
+
+	orderResponse.ID = m.ID
+	orderResponse.CustomerID = m.CustomerID
+	orderResponse.OrderItems = m.OrderItems
+	orderResponse.Address = m.Address
+	orderResponse.CheckoutTotal = checkoutTotal
+	orderResponse.Pincode = m.Pincode
+	orderResponse.IsPaid = m.IsPaid
+	orderResponse.IsDelivered = m.IsDelivered
+	orderResponse.Currency = m.Currency
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -183,53 +221,42 @@ func (o *OrderService) CreateOrder(accessToken string) (*dto.OrderResponse, erro
 		}
 	}()
 
-	rzpClient := razorpay.NewClient(config.Config().RazorpayKeyID, config.Config().RazorpaySecret)
+	orderResponse.RzpID = rzpOrder["id"].(string)
 
-	data := map[string]any{
-		"amount":   m.CheckoutTotal,
-		"currency": o.OrderReqeustDTO.Currency,
-		"receipt":  "order_" + strconv.FormatInt(time.Now().Unix(), 10),
+	if err := o.Notifier.SendNotificationToUser("order-placed", orderCreated); err != nil {
+		log.Println("error while placing order ", err)
 	}
 
-	rzpOrder, err := rzpClient.Order.Create(data, nil)
+	return orderResponse, nil
+}
+
+func (o *OrderService) GetOrderByID(id primitive.ObjectID, userClaims *token.UserClaims) (*dto.OrderResponse, error) {
+	m, err := o.store.GetOrderByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	orderResponseDTO.RzpID = rzpOrder["id"].(string)
-
-	return orderResponseDTO, nil
-}
-
-func (o *OrderService) GetOrderByID(id primitive.ObjectID) error {
-	m := models.New()
-	m.ID = id
-
-	if err := m.GetOrderByID(); err != nil {
-		return err
+	if userClaims.ID != m.CustomerID {
+		return nil, fmt.Errorf("you do not have authorization to access this resource")
 	}
 
-	if o.UserClaims.ID != m.CustomerID {
-		return fmt.Errorf("you do not have authorization to access this resource")
-	}
+	orderResponse := &dto.OrderResponse{}
+	orderResponse.ID = m.ID
+	orderResponse.CustomerID = m.CustomerID
+	orderResponse.RzpID = m.RzpID
+	orderResponse.Currency = m.Currency
+	orderResponse.OrderItems = m.OrderItems
+	orderResponse.Address = m.Address
+	orderResponse.Pincode = m.Pincode
+	orderResponse.CheckoutTotal = m.CheckoutTotal
+	orderResponse.IsDelivered = m.IsDelivered
+	orderResponse.IsPaid = m.IsPaid
 
-	o.OrderResponseDTO.ID = m.ID
-	o.OrderResponseDTO.CustomerID = m.CustomerID
-	o.OrderResponseDTO.OrderItems = m.OrderItems
-	o.OrderResponseDTO.Address = m.Address
-	o.OrderResponseDTO.Pincode = m.Pincode
-	o.OrderResponseDTO.CheckoutTotal = m.CheckoutTotal
-	o.OrderResponseDTO.IsDelivered = m.IsDelivered
-	o.OrderResponseDTO.IsPaid = m.IsPaid
-
-	return nil
+	return orderResponse, nil
 }
 
-func (o *OrderService) GetOrdersByCustomerID() ([]dto.OrderResponse, error) {
-	m := models.New()
-	m.CustomerID = o.UserClaims.ID
-
-	orders, err := m.GetOrdersByCustomerID()
+func (o *OrderService) GetOrdersByCustomerID(userClaims *token.UserClaims) ([]dto.OrderResponse, error) {
+	orders, err := o.store.GetOrdersByCustomerID(userClaims.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -241,6 +268,8 @@ func (o *OrderService) GetOrdersByCustomerID() ([]dto.OrderResponse, error) {
 
 		orderResponse.ID = v.ID
 		orderResponse.CustomerID = v.CustomerID
+		orderResponse.RzpID = v.RzpID
+		orderResponse.Currency = v.Currency
 		orderResponse.OrderItems = v.OrderItems
 		orderResponse.Address = v.Address
 		orderResponse.Pincode = v.Pincode
@@ -254,31 +283,29 @@ func (o *OrderService) GetOrdersByCustomerID() ([]dto.OrderResponse, error) {
 	return orderResponses, nil
 }
 
-func (o *OrderService) UpdateDeliveryAddress(id primitive.ObjectID, address string) error {
-	m := models.New()
-	m.ID = id
-	m.Address = address
-	return m.UpdateDeliveryAddress()
+func (o *OrderService) UpdateDeliveryAddress(id primitive.ObjectID, userClaims *token.UserClaims, address string) error {
+	m, err := o.store.GetOrderByID(id)
+	if err != nil {
+		return err
+	}
+	if m.CustomerID != userClaims.ID {
+		return fmt.Errorf("you do not have enough permissions to access this resource")
+	}
+
+	return o.store.UpdateDeliveryAddress(id, address)
 }
 
 func (o *OrderService) UpdatePaymentStatus(id primitive.ObjectID, isPaid bool) error {
-	m := models.New()
-	m.ID = id
-	m.IsPaid = isPaid
-	return m.UpdatePaymentStatus()
+	return o.store.UpdatePaymentStatus(id, isPaid)
 }
 
 func (o *OrderService) UpdateDeliveryStatus(id primitive.ObjectID, isDelivered bool) error {
-	m := models.New()
-	m.ID = id
-	m.IsDelivered = isDelivered
-	return m.UpdateDeliveryStatus()
+	return o.store.UpdateDeliveryStatus(id, isDelivered)
 }
 
-func (O *OrderService) CancelOrder(id primitive.ObjectID, customerID uuid.UUID) error {
-	m := models.New()
-	m.ID = id
-	if err := m.GetOrderByID(); err != nil {
+func (o *OrderService) CancelOrder(id primitive.ObjectID, customerID uuid.UUID) error {
+	m, err := o.store.GetOrderByID(id)
+	if err != nil {
 		return err
 	}
 
@@ -286,7 +313,7 @@ func (O *OrderService) CancelOrder(id primitive.ObjectID, customerID uuid.UUID) 
 		return fmt.Errorf("you do not have access to this order")
 	}
 
-	if err := m.CancelOrder(); err != nil {
+	if err := o.store.CancelOrder(id); err != nil {
 		return err
 	}
 

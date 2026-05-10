@@ -21,6 +21,7 @@ type config struct {
 	EurekaHostname  string
 	RazorpayKeyID   string
 	RazorpaySecret  string
+	CourierKey      string
 }
 
 func Init() {
@@ -36,6 +37,7 @@ func Init() {
 			EurekaHostname:  os.Getenv("EUREKA_HOSTNAME"),
 			RazorpayKeyID:   os.Getenv("RAZORPAY_KEY_ID"),
 			RazorpaySecret:  os.Getenv("RAZORPAY_SECRET"),
+			CourierKey:      os.Getenv("COURIER_KEY"),
 		}
 	})
 }
