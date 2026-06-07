@@ -2,7 +2,7 @@ package store
 
 import (
 	"github.com/google/uuid"
-	"github.com/risbern21/ecom/orders/models"
+	"github.com/risbern21/runaway/orders-service/models"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 

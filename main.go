@@ -1,153 +1,148 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/hudl/fargo"
-	"github.com/op/go-logging"
 	"github.com/razorpay/razorpay-go"
-	"github.com/risbern21/ecom/orders/controllers"
-	_ "github.com/risbern21/ecom/orders/docs"
-	"github.com/risbern21/ecom/orders/internal/cache"
-	"github.com/risbern21/ecom/orders/internal/config"
-	"github.com/risbern21/ecom/orders/internal/database"
-	"github.com/risbern21/ecom/orders/internal/kafka"
-	"github.com/risbern21/ecom/orders/internal/notifications"
-	"github.com/risbern21/ecom/orders/internal/server"
-	"github.com/risbern21/ecom/orders/services"
-	"github.com/risbern21/ecom/orders/store"
+	"github.com/risbern21/runaway/orders-service/api"
+	"github.com/risbern21/runaway/orders-service/db"
+	"github.com/risbern21/runaway/orders-service/gen/pb"
+	"github.com/risbern21/runaway/orders-service/interceptors"
+	"github.com/risbern21/runaway/orders-service/internal/auth"
+	"github.com/risbern21/runaway/orders-service/internal/config"
+	kafkaProducer "github.com/risbern21/runaway/orders-service/internal/kafka"
+	"github.com/risbern21/runaway/orders-service/internal/messaging"
+	"github.com/risbern21/runaway/orders-service/services"
+	"github.com/risbern21/runaway/orders-service/store"
+	"github.com/segmentio/kafka-go"
+	"github.com/slack-go/slack"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-func heartBeat(conn fargo.EurekaConnection, instance fargo.Instance, l *logging.Logger) {
-	for {
-		err := conn.HeartBeatInstance(&instance)
-		if err != nil {
-			l.Errorf("Heartbeat failed:", err)
-		} else {
-			l.Info("Heartbeat sent")
-		}
+var (
+	infoLogger *zap.Logger
+)
 
-		time.Sleep(30 * time.Second)
-	}
-}
-
-func consumeFromKafka(s *services.OrderService) {
-	errs := make(chan error, 10)
-
-	pc := kafka.NewConsumer(kafka.TopicPayments)
-	defer pc.Close()
-
-	dc := kafka.NewConsumer(kafka.TopicDeliveries)
-	defer dc.Close()
-
-	go pc.ConsumeTopicPayments(s.UpdatePaymentStatus, errs)
-
-	go dc.ConsumeTopicDeliveries(s.UpdateDeliveryStatus, errs)
-
-	for err := range errs {
-		log.Printf("error occurred :%v\n", err)
-	}
-}
-
-// @title orders microservice API
-// @version 1.0
-// @description This is a orders server for ecomm micro project
-// @termsOfService http://swagger.io/terms/
-
-// @contact.name API Support
-// @contact.url http://www.swagger.io/support
-// @contact.email support@swagger.io
-
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host localhost:42067
-// @BasePath /
 func main() {
 	config.Init()
-	f, err := os.OpenFile("/tmp/orders-service-eureka.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
+	db.Connect()
+	if err := initLogger(); err != nil {
+		log.Fatalf("unable to init zap logger : %v\n", err)
+	}
+
+	am, err := auth.NewAuthManager(config.Config().SecretKey)
 	if err != nil {
-		log.Fatalf("unable to open log file /tmp/orders-service-eureka.log")
-	}
-	defer f.Close()
-
-	backend := logging.NewLogBackend(f, "", 0)
-	logging.SetBackend(backend)
-
-	serviceRegistry := config.Config().ServiceRegistry
-	c := fargo.NewConn(serviceRegistry)
-	instance := fargo.Instance{
-		InstanceId:       "orders-service",
-		HostName:         config.Config().EurekaHostname,
-		App:              "ORDERS-SERVICE",
-		IPAddr:           "localhost",
-		VipAddress:       "ORDERS-SERVICE",
-		SecureVipAddress: "ORDERS-SERVICE",
-		Status:           fargo.UP,
-		Port:             42067,
-		PortEnabled:      true,
-		DataCenterInfo: fargo.DataCenterInfo{
-			Name: fargo.MyOwn,
-		},
-		LeaseInfo: fargo.LeaseInfo{
-			RenewalIntervalInSecs: 30,
-			DurationInSecs:        90,
-		},
+		infoLogger.Fatal("unable to create auth manager\n")
 	}
 
-	// Register with Eureka
-	err = c.RegisterInstance(&instance)
+	//interceptors
+	li := interceptors.NewLoggingInterceptor(infoLogger)
+	ai, err := interceptors.NewAuthInterceptor(am)
 	if err != nil {
-		log.Fatal("Failed to register:", err)
+		infoLogger.Error("unable to create auth interceptor")
 	}
 
-	l := logging.MustGetLogger("products")
-	go heartBeat(c, instance, l)
+	p := kafkaProducer.NewProducer(
+		kafkaProducer.ProducerConfig{
+			Brokers:      config.Config().Brokers,
+			Topic:        kafkaProducer.TopicOrderCreated.String(),
+			BatchSize:    100,
+			BatchTimeout: 50,
+			Async:        false,
+			RequiredAcks: kafka.RequireAll,
+		},
+	)
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	rzpClient := razorpay.NewClient(config.Config().RazorpayKeyID, config.Config().RazorpaySecret)
+
+	sc := slack.New(config.Config().SlackToken)
+	m, err := messaging.NewSlackMessenger(sc, config.Config().SlackChannel)
+	if err != nil {
+		infoLogger.Sugar().Fatalf("unable to create slack client : %v\n", err)
+	}
+
+	conn, err := grpc.NewClient(
+		config.Config().ProductsClient,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithChainUnaryInterceptor(ai.ForwardMetadataInterceptor()),
+		grpc.WithChainUnaryInterceptor(li.UnaryClientLoggingInterceptor()),
+	)
+	if err != nil {
+		infoLogger.Sugar().Fatalf("unable to create grpc products client : %v\n", err)
+	}
+
+	pc := pb.NewProductsServiceClient(conn)
+
+	s := store.NewMongoStore(db.Client(), "ordersDB", "orders")
+	o := services.NewOrderService(s, p, m, pc, rzpClient)
+
+	grpcServer := api.NewGRPCServer(o, li, ai)
+
+	if err := runServer(context.Background(), grpcServer); err != nil {
+		infoLogger.Sugar().Errorf("unable to run server : %v\n", err)
+	}
+
+	if err := conn.Close(); err != nil {
+		infoLogger.Sugar().Errorf("couldnt close the grpc client connection : %v\n", err)
+	}
+	infoLogger.Sugar().Infoln("successfully closed the grpc client connection")
+	if err := p.Close(); err != nil {
+		infoLogger.Sugar().Errorf("couldnt close the kafka connection : %v\n", err)
+	}
+	infoLogger.Sugar().Infoln("successfully closed the kafka connection")
+	if err := db.Disconnect(); err != nil {
+		infoLogger.Sugar().Errorf("Failed to disconnect from MongoDB: %v\n", err)
+	}
+	infoLogger.Sugar().Infoln("successfully disconnected from MongoDB")
+}
+
+func runServer(ctx context.Context, grpcServer *grpc.Server) error {
+	serverErr := make(chan error, 1)
 
 	go func() {
-		<-quit
-		log.Println("deregistering from eureka")
-		c.DeregisterInstance(&instance)
+		infoLogger.Sugar().Infoln("products service running on port :42067")
+		lis, err := net.Listen("tcp", ":42067")
+		if err != nil {
+			infoLogger.Sugar().Fatalf("unable to listen on port :42067\n")
+		}
 
-		database.Disconnect()
-		cache.Disconnect()
-		os.Exit(0)
+		if err := grpcServer.Serve(lis); errors.Is(err, grpc.ErrServerStopped) {
+			serverErr <- err
+		}
+		close(serverErr)
 	}()
 
-	database.Connect()
-	cache.Connect()
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGTERM, syscall.SIGINT)
 
-	kafka.Init(config.Config().Brokers)
-	defer kafka.Close()
-
-	secretKey, ok := os.LookupEnv("SECRET_KEY")
-	if !ok {
-		log.Fatalf("secret key not found")
+	select {
+	case err := <-serverErr:
+		return err
+	case <-shutdown:
+		infoLogger.Sugar().Infoln("shutdown signal received")
+	case <-ctx.Done():
+		infoLogger.Sugar().Infoln("parent context cancelled")
 	}
 
-	// create service and contrlloer instances
-	rc := razorpay.NewClient(config.Config().RazorpayKeyID, config.Config().RazorpaySecret)
-	n := notifications.NewNotifier()
-	ms := store.NewMongoStore()
+	grpcServer.GracefulStop()
 
-	os := services.NewOrderService(rc, n, ms, c)
+	infoLogger.Info("server exited successfully")
+	return nil
+}
 
-	oc := controllers.NewController(secretKey, os)
-
-	server.SetUp(oc)
-
-	go consumeFromKafka(os)
-
-	app := server.New()
-
-	if err := app.Listen(config.Config().Port); err != nil {
-		log.Fatalf("err : %v", err)
+func initLogger() error {
+	var err error
+	infoLogger, err = zap.NewProduction()
+	if err != nil {
+		return err
 	}
+	return nil
 }

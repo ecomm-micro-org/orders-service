@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/risbern21/ecom/orders/internal/dto"
+	"github.com/risbern21/runaway/orders-service/gen/pb"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -22,7 +22,7 @@ type Order struct {
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at"`
 	DeletedAt     time.Time          `bson:"deleted_at" json:"deleted_at"`
 
-	OrderItems []dto.OrderItem `bson:"order_items" json:"order_items"`
+	OrderItems []*pb.OrderItem `bson:"order_items" json:"order_items"`
 }
 
 func NewOrder() *Order {

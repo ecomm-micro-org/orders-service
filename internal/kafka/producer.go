@@ -2,38 +2,38 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
+	"time"
 
-	"github.com/risbern21/ecom/orders/internal/config"
 	"github.com/segmentio/kafka-go"
 )
 
 type Producer struct {
-	writer *kafka.Writer
+	w *kafka.Writer
 }
 
-func NewProducer() *Producer {
+func NewProducer(pCfg ProducerConfig) *Producer {
 	return &Producer{
-		writer: &kafka.Writer{
-			Addr:     kafka.TCP(config.Config().Brokers...),
-			Balancer: &kafka.LeastBytes{},
-		},
+		w: kafka.NewWriter(
+			kafka.WriterConfig{
+				Brokers:      pCfg.Brokers,
+				Topic:        pCfg.Topic,
+				Balancer:     &kafka.LeastBytes{},
+				BatchSize:    pCfg.BatchSize,
+				BatchTimeout: time.Duration(pCfg.BatchTimeout) * time.Millisecond,
+				RequiredAcks: int(pCfg.RequiredAcks),
+				Async:        pCfg.Async,
+			},
+		),
 	}
 }
 
-func (p *Producer) Publish(ctx context.Context, topic string, key string, value any) error {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-
-	return p.writer.WriteMessages(ctx, kafka.Message{
-		Topic: topic,
-		Key:   []byte(key),
-		Value: data,
+func (p *Producer) Produce(ctx context.Context, key, val []byte) error {
+	return p.w.WriteMessages(ctx, kafka.Message{
+		Key:   key,
+		Value: val,
 	})
 }
 
 func (p *Producer) Close() error {
-	return p.writer.Close()
+	return p.w.Close()
 }

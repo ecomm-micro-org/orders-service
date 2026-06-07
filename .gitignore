@@ -1,1 +1,6 @@
 run.sh
+.zed
+.env
+.vscode
+*.sh
+obsolete

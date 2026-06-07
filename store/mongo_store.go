@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/risbern21/ecom/orders/internal/database"
-	"github.com/risbern21/ecom/orders/models"
+	"github.com/risbern21/runaway/orders-service/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -19,11 +18,11 @@ type MongoStore struct {
 	collection string
 }
 
-func NewMongoStore() *MongoStore {
+func NewMongoStore(c *mongo.Client, database, collection string) *MongoStore {
 	return &MongoStore{
-		client:     database.Client(),
-		database:   "orderDB",
-		collection: "orders",
+		client:     c,
+		database:   database,
+		collection: collection,
 	}
 }
 
@@ -37,7 +36,7 @@ func (s *MongoStore) CreateOrder(o *models.Order) error {
 func (s *MongoStore) GetOrderByID(id primitive.ObjectID) (*models.Order, error) {
 	coll := s.client.Database(s.database).Collection(s.collection)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	o := models.NewOrder()
@@ -51,7 +50,7 @@ func (s *MongoStore) GetOrdersByCustomerID(customerID uuid.UUID) ([]models.Order
 	coll := s.client.Database(s.database).Collection(s.collection)
 
 	var orders []models.Order
-	ctx1, cancel1 := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel1()
 
 	cursor, err := coll.Find(ctx1, bson.M{"customer_id": customerID})
@@ -59,7 +58,7 @@ func (s *MongoStore) GetOrdersByCustomerID(customerID uuid.UUID) ([]models.Order
 		return nil, err
 	}
 
-	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel2()
 	if err = cursor.All(ctx2, &orders); err != nil {
 		return nil, err
@@ -71,7 +70,7 @@ func (s *MongoStore) GetOrdersByCustomerID(customerID uuid.UUID) ([]models.Order
 func (s *MongoStore) UpdateDeliveryAddress(id primitive.ObjectID, address string) error {
 	coll := s.client.Database(s.database).Collection(s.collection)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	_, err := coll.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"address": address}})
@@ -85,7 +84,7 @@ func (s *MongoStore) UpdateDeliveryAddress(id primitive.ObjectID, address string
 func (s *MongoStore) UpdatePaymentStatus(id primitive.ObjectID, isPaid bool) error {
 	coll := s.client.Database(s.database).Collection(s.collection)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	result, err := coll.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"is_paid": isPaid}})
@@ -103,7 +102,7 @@ func (s *MongoStore) UpdatePaymentStatus(id primitive.ObjectID, isPaid bool) err
 func (s *MongoStore) UpdateDeliveryStatus(id primitive.ObjectID, isDelivered bool) error {
 	coll := s.client.Database(s.database).Collection(s.collection)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	result, err := coll.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{"is_delivered": isDelivered}})
@@ -121,7 +120,7 @@ func (s *MongoStore) UpdateDeliveryStatus(id primitive.ObjectID, isDelivered boo
 func (s *MongoStore) CancelOrder(id primitive.ObjectID) error {
 	coll := s.client.Database(s.database).Collection(s.collection)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	result, err := coll.DeleteOne(ctx, bson.M{"_id": id})
