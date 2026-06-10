@@ -1,10 +1,10 @@
 package api
 
 import (
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/handlers"
-	"github.com/risbern21/runaway/orders-service/interceptors"
-	"github.com/risbern21/runaway/orders-service/services"
+	"github.com/ecomm-micro-org/orders-service/handlers"
+	"github.com/ecomm-micro-org/orders-service/interceptors"
+	"github.com/ecomm-micro-org/orders-service/pb"
+	"github.com/ecomm-micro-org/orders-service/services"
 	"google.golang.org/grpc"
 )
 

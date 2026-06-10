@@ -40,7 +40,7 @@ type OrdersServiceClient interface {
 	PaymentFailure(ctx context.Context, in *PaymentFailureRequest, opts ...grpc.CallOption) (*PaymentFailureResponse, error)
 	PaymentCallback(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PaymentCallbackResponse, error)
 	GetOrderByID(ctx context.Context, in *GetOrderByIDRequest, opts ...grpc.CallOption) (*GetOrderByIDResponse, error)
-	GetOrdersByCustomerID(ctx context.Context, in *GetOrdersByCustomerIDRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetOrdersByCustomerIDResponse], error)
+	GetOrdersByCustomerID(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetOrdersByCustomerIDResponse, error)
 	CreateOrder(ctx context.Context, in *CreateOrderRequest, opts ...grpc.CallOption) (*CreateOrderResponse, error)
 	UpdateDeliveryAddress(ctx context.Context, in *UpdateDeliveryAddressRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	CancelOrder(ctx context.Context, in *CancelOrderRequest, opts ...grpc.CallOption) (*CancelOrderResponse, error)
@@ -104,24 +104,15 @@ func (c *ordersServiceClient) GetOrderByID(ctx context.Context, in *GetOrderByID
 	return out, nil
 }
 
-func (c *ordersServiceClient) GetOrdersByCustomerID(ctx context.Context, in *GetOrdersByCustomerIDRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetOrdersByCustomerIDResponse], error) {
+func (c *ordersServiceClient) GetOrdersByCustomerID(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetOrdersByCustomerIDResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &OrdersService_ServiceDesc.Streams[0], OrdersService_GetOrdersByCustomerID_FullMethodName, cOpts...)
+	out := new(GetOrdersByCustomerIDResponse)
+	err := c.cc.Invoke(ctx, OrdersService_GetOrdersByCustomerID_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[GetOrdersByCustomerIDRequest, GetOrdersByCustomerIDResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return out, nil
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type OrdersService_GetOrdersByCustomerIDClient = grpc.ServerStreamingClient[GetOrdersByCustomerIDResponse]
 
 func (c *ordersServiceClient) CreateOrder(ctx context.Context, in *CreateOrderRequest, opts ...grpc.CallOption) (*CreateOrderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -162,7 +153,7 @@ type OrdersServiceServer interface {
 	PaymentFailure(context.Context, *PaymentFailureRequest) (*PaymentFailureResponse, error)
 	PaymentCallback(context.Context, *emptypb.Empty) (*PaymentCallbackResponse, error)
 	GetOrderByID(context.Context, *GetOrderByIDRequest) (*GetOrderByIDResponse, error)
-	GetOrdersByCustomerID(*GetOrdersByCustomerIDRequest, grpc.ServerStreamingServer[GetOrdersByCustomerIDResponse]) error
+	GetOrdersByCustomerID(context.Context, *emptypb.Empty) (*GetOrdersByCustomerIDResponse, error)
 	CreateOrder(context.Context, *CreateOrderRequest) (*CreateOrderResponse, error)
 	UpdateDeliveryAddress(context.Context, *UpdateDeliveryAddressRequest) (*emptypb.Empty, error)
 	CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error)
@@ -191,8 +182,8 @@ func (UnimplementedOrdersServiceServer) PaymentCallback(context.Context, *emptyp
 func (UnimplementedOrdersServiceServer) GetOrderByID(context.Context, *GetOrderByIDRequest) (*GetOrderByIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOrderByID not implemented")
 }
-func (UnimplementedOrdersServiceServer) GetOrdersByCustomerID(*GetOrdersByCustomerIDRequest, grpc.ServerStreamingServer[GetOrdersByCustomerIDResponse]) error {
-	return status.Error(codes.Unimplemented, "method GetOrdersByCustomerID not implemented")
+func (UnimplementedOrdersServiceServer) GetOrdersByCustomerID(context.Context, *emptypb.Empty) (*GetOrdersByCustomerIDResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetOrdersByCustomerID not implemented")
 }
 func (UnimplementedOrdersServiceServer) CreateOrder(context.Context, *CreateOrderRequest) (*CreateOrderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateOrder not implemented")
@@ -314,16 +305,23 @@ func _OrdersService_GetOrderByID_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _OrdersService_GetOrdersByCustomerID_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetOrdersByCustomerIDRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _OrdersService_GetOrdersByCustomerID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(OrdersServiceServer).GetOrdersByCustomerID(m, &grpc.GenericServerStream[GetOrdersByCustomerIDRequest, GetOrdersByCustomerIDResponse]{ServerStream: stream})
+	if interceptor == nil {
+		return srv.(OrdersServiceServer).GetOrdersByCustomerID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrdersService_GetOrdersByCustomerID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrdersServiceServer).GetOrdersByCustomerID(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
 }
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type OrdersService_GetOrdersByCustomerIDServer = grpc.ServerStreamingServer[GetOrdersByCustomerIDResponse]
 
 func _OrdersService_CreateOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateOrderRequest)
@@ -407,6 +405,10 @@ var OrdersService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _OrdersService_GetOrderByID_Handler,
 		},
 		{
+			MethodName: "GetOrdersByCustomerID",
+			Handler:    _OrdersService_GetOrdersByCustomerID_Handler,
+		},
+		{
 			MethodName: "CreateOrder",
 			Handler:    _OrdersService_CreateOrder_Handler,
 		},
@@ -419,12 +421,6 @@ var OrdersService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _OrdersService_CancelOrder_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "GetOrdersByCustomerID",
-			Handler:       _OrdersService_GetOrdersByCustomerID_Handler,
-			ServerStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "orders.proto",
 }

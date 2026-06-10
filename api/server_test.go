@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/risbern21/runaway/orders-service/interceptors"
-	internalauth "github.com/risbern21/runaway/orders-service/internal/auth"
-	"github.com/risbern21/runaway/orders-service/services"
+	"github.com/ecomm-micro-org/orders-service/interceptors"
+	internalauth "github.com/ecomm-micro-org/orders-service/internal/auth"
+	"github.com/ecomm-micro-org/orders-service/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

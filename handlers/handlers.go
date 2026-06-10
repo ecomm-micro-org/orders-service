@@ -5,13 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ecomm-micro-org/orders-service/internal/config"
+	"github.com/ecomm-micro-org/orders-service/pb"
+	"github.com/ecomm-micro-org/orders-service/services"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/internal/config"
-	"github.com/risbern21/runaway/orders-service/services"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -49,14 +48,13 @@ func (h *OrderHandler) GetOrderByID(ctx context.Context, req *pb.GetOrderByIDReq
 	return res, nil
 }
 
-func (h *OrderHandler) GetOrdersByCustomerID(_ *emptypb.Empty, stream grpc.ServerStreamingServer[pb.GetOrdersByCustomerIDResponse]) error {
-	ctx := stream.Context()
+func (h *OrderHandler) GetOrdersByCustomerID(ctx context.Context, _ *emptypb.Empty) (*pb.GetOrdersByCustomerIDResponse, error) {
 	userID, err := uuid.Parse(ctx.Value("userID").(string))
 	if err != nil {
-		return status.Error(codes.Unauthenticated, "invalid user id")
+		return nil, status.Error(codes.Unauthenticated, "invalid user id")
 	}
 
-	return h.orderService.GetOrdersByCustomerID(userID, stream)
+	return h.orderService.GetOrdersByCustomerID(userID)
 }
 
 func (h *OrderHandler) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*pb.CreateOrderResponse, error) {
@@ -67,6 +65,7 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *pb.CreateOrderReque
 
 	res, err := h.orderService.CreateOrder(ctx, userID, req)
 	if err != nil {
+		println("errr is %w", err)
 		return nil, status.Error(codes.Internal, fmt.Sprintf("something went wrong try again later %v", err.Error()))
 	}
 	return res, nil
@@ -111,6 +110,25 @@ func (h *OrderHandler) UpdateDeliveryAddress(ctx context.Context, req *pb.Update
 	return &emptypb.Empty{}, nil
 }
 
-func (h *OrderHandler) CancelOrder(ctx context.Context, req *emptypb.Empty) (*pb.CancelOrderResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CancelOrder not implemented")
+func (h *OrderHandler) CancelOrder(ctx context.Context, req *pb.CancelOrderRequest) (*pb.CancelOrderResponse, error) {
+	id, err := primitive.ObjectIDFromHex(req.Id)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid order id")
+	}
+
+	userID, err := uuid.Parse(ctx.Value("userID").(string))
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid user id")
+	}
+
+	if err := h.orderService.CancelOrder(id, userID); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, status.Error(codes.NotFound, "order not found")
+		}
+		return nil, status.Error(codes.Internal, "something went wrong")
+	}
+
+	return &pb.CancelOrderResponse{
+		IsCancelled: true,
+	}, nil
 }

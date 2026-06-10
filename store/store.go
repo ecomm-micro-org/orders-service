@@ -1,8 +1,8 @@
 package store
 
 import (
+	"github.com/ecomm-micro-org/orders-service/models"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/models"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 

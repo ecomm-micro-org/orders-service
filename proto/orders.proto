@@ -29,11 +29,11 @@ message GetOrderByIDResponse {
   bool is_delivered = 10;
 }
 
-message GetOrdersByCustomerIDRequest {
-  string customer_id = 1;
+message GetOrdersByCustomerIDResponse {
+  repeated OrderResponse orders = 1;
 }
 
-message GetOrdersByCustomerIDResponse {
+message OrderResponse {
   string id = 1;
   string customer_id = 2;
   string rzp_id = 3;
@@ -114,8 +114,8 @@ service OrdersService {
     option (google.api.http) = {get: "/orders/{id}"};
   }
 
-  rpc GetOrdersByCustomerID(GetOrdersByCustomerIDRequest) returns (stream GetOrdersByCustomerIDResponse) {
-    option (google.api.http) = {get: "/orders/customer/{customer_id}"};
+  rpc GetOrdersByCustomerID(google.protobuf.Empty) returns (GetOrdersByCustomerIDResponse) {
+    option (google.api.http) = {get: "/orders/customer/get-my-orders"};
   }
 
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {

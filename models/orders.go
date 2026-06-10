@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
+	"github.com/ecomm-micro-org/orders-service/pb"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 

@@ -3,9 +3,9 @@ package store
 import (
 	"testing"
 
+	"github.com/ecomm-micro-org/orders-service/models"
+	"github.com/ecomm-micro-org/orders-service/pb"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"

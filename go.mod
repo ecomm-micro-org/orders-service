@@ -1,4 +1,4 @@
-module github.com/risbern21/runaway/orders-service
+module github.com/ecomm-micro-org/orders-service
 
 go 1.25.0
 
