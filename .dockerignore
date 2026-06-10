@@ -1,5 +1,31 @@
+# Version control
 .git
+.gitignore
 .github
-*.md
-run.sh
+
+# Docker
+.dockerignore
+Dockerfile
+
+# Environment & secrets
+.env
+.env.*
+
+# Editor & IDE
+.zed
+.vscode
+.idea
+
+# Shell scripts (local dev only)
 *.sh
+
+# Logs
+*.log
+
+# Build artifacts
+orders
+
+# Docs & misc
+*.md
+README*
+obsolete
