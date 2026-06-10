@@ -1,8 +1,8 @@
 package cache
 
 import (
+	"github.com/ecomm-micro-org/orders-service/internal/config"
 	"github.com/redis/go-redis/v9"
-	"github.com/risbern21/runaway/orders-service/internal/config"
 )
 
 var rdb *redis.Client

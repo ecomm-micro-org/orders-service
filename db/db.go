@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/risbern21/runaway/orders-service/internal/config"
+	"github.com/ecomm-micro-org/orders-service/internal/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

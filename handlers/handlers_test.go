@@ -5,17 +5,16 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ecomm-micro-org/orders-service/internal/config"
+	"github.com/ecomm-micro-org/orders-service/models"
+	"github.com/ecomm-micro-org/orders-service/pb"
+	"github.com/ecomm-micro-org/orders-service/services"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/internal/config"
-	"github.com/risbern21/runaway/orders-service/models"
-	"github.com/risbern21/runaway/orders-service/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -79,27 +78,6 @@ func (m handlerTestStore) CancelOrder(id primitive.ObjectID) error {
 	return nil
 }
 
-type handlerOrdersStream struct {
-	ctx     context.Context
-	sent    []*pb.GetOrdersByCustomerIDResponse
-	sendErr error
-}
-
-func (s *handlerOrdersStream) Send(res *pb.GetOrdersByCustomerIDResponse) error {
-	if s.sendErr != nil {
-		return s.sendErr
-	}
-	s.sent = append(s.sent, res)
-	return nil
-}
-
-func (s *handlerOrdersStream) SetHeader(metadata.MD) error  { return nil }
-func (s *handlerOrdersStream) SendHeader(metadata.MD) error { return nil }
-func (s *handlerOrdersStream) SetTrailer(metadata.MD)       {}
-func (s *handlerOrdersStream) Context() context.Context     { return s.ctx }
-func (s *handlerOrdersStream) SendMsg(any) error            { return nil }
-func (s *handlerOrdersStream) RecvMsg(any) error            { return nil }
-
 func newHandlerWithStore(s handlerTestStore) *OrderHandler {
 	return NewOrderHandler(services.NewOrderService(s, nil, nil, nil, nil))
 }
@@ -107,6 +85,8 @@ func newHandlerWithStore(s handlerTestStore) *OrderHandler {
 func ctxWithUserID(userID string) context.Context {
 	return context.WithValue(context.Background(), "userID", userID)
 }
+
+// GetOrderByID
 
 func TestGetOrderByIDRejectsInvalidOrderID(t *testing.T) {
 	h := NewOrderHandler(nil)
@@ -174,16 +154,17 @@ func TestGetOrderByIDReturnsResponseOnSuccess(t *testing.T) {
 	assert.Equal(t, "Address", res.Address)
 }
 
+// GetOrdersByCustomerID (unary)
+
 func TestGetOrdersByCustomerIDRejectsInvalidUserID(t *testing.T) {
 	h := NewOrderHandler(nil)
-	stream := &handlerOrdersStream{ctx: ctxWithUserID("bad-user")}
 
-	err := h.GetOrdersByCustomerID(&emptypb.Empty{}, stream)
+	_, err := h.GetOrdersByCustomerID(ctxWithUserID("bad-user"), &emptypb.Empty{})
 	require.Error(t, err)
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 }
 
-func TestGetOrdersByCustomerIDStreamsOrders(t *testing.T) {
+func TestGetOrdersByCustomerIDReturnsOrders(t *testing.T) {
 	customerID := uuid.New()
 	orderID := primitive.NewObjectID()
 	h := newHandlerWithStore(handlerTestStore{
@@ -199,14 +180,26 @@ func TestGetOrdersByCustomerIDStreamsOrders(t *testing.T) {
 			}}, nil
 		},
 	})
-	stream := &handlerOrdersStream{ctx: ctxWithUserID(customerID.String())}
 
-	err := h.GetOrdersByCustomerID(&emptypb.Empty{}, stream)
+	res, err := h.GetOrdersByCustomerID(ctxWithUserID(customerID.String()), &emptypb.Empty{})
 	require.NoError(t, err)
-	require.Len(t, stream.sent, 1)
-	assert.Equal(t, orderID.Hex(), stream.sent[0].Id)
-	assert.Equal(t, customerID.String(), stream.sent[0].CustomerId)
+	require.Len(t, res.Orders, 1)
+	assert.Equal(t, orderID.Hex(), res.Orders[0].Id)
+	assert.Equal(t, customerID.String(), res.Orders[0].CustomerId)
 }
+
+func TestGetOrdersByCustomerIDPropagatesStoreError(t *testing.T) {
+	h := newHandlerWithStore(handlerTestStore{
+		getOrdersByCustomerIDFn: func(uuid.UUID) ([]models.Order, error) {
+			return nil, errors.New("db error")
+		},
+	})
+
+	_, err := h.GetOrdersByCustomerID(ctxWithUserID(uuid.NewString()), &emptypb.Empty{})
+	require.Error(t, err)
+}
+
+// CreateOrder
 
 func TestCreateOrderRejectsInvalidUserID(t *testing.T) {
 	h := NewOrderHandler(nil)
@@ -215,6 +208,8 @@ func TestCreateOrderRejectsInvalidUserID(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 }
+
+// GetKey
 
 func TestGetKeyReturnsConfiguredRazorpayKey(t *testing.T) {
 	t.Setenv("BROKERS", "")
@@ -226,6 +221,8 @@ func TestGetKeyReturnsConfiguredRazorpayKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "rzp_test_key", res.Key)
 }
+
+// Unimplemented stubs
 
 func TestPaymentSuccessReturnsUnimplemented(t *testing.T) {
 	h := NewOrderHandler(nil)
@@ -247,6 +244,8 @@ func TestPaymentCallbackReturnsUnimplemented(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, codes.Unimplemented, status.Code(err))
 }
+
+// UpdateDeliveryAddress
 
 func TestUpdateDeliveryAddressRejectsInvalidOrderID(t *testing.T) {
 	h := NewOrderHandler(nil)
@@ -281,7 +280,7 @@ func TestUpdateDeliveryAddressReturnsNotFoundWhenStoreMisses(t *testing.T) {
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestUpdateDeliveryAddressReturnsEmptyResponseOnSuccess(t *testing.T) {
+func TestUpdateDeliveryAddressReturnsResponseOnSuccess(t *testing.T) {
 	customerID := uuid.New()
 	orderID := primitive.NewObjectID()
 	h := newHandlerWithStore(handlerTestStore{
@@ -300,9 +299,62 @@ func TestUpdateDeliveryAddressReturnsEmptyResponseOnSuccess(t *testing.T) {
 	require.NotNil(t, res)
 }
 
-func TestCancelOrderReturnsUnimplemented(t *testing.T) {
+// CancelOrder
+
+func TestCancelOrderRejectsInvalidOrderID(t *testing.T) {
 	h := NewOrderHandler(nil)
-	_, err := h.CancelOrder(context.Background(), &emptypb.Empty{})
+
+	_, err := h.CancelOrder(context.Background(), &pb.CancelOrderRequest{Id: "bad-id"})
 	require.Error(t, err)
-	assert.Equal(t, codes.Unimplemented, status.Code(err))
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+}
+
+func TestCancelOrderRejectsInvalidUserID(t *testing.T) {
+	h := NewOrderHandler(nil)
+
+	_, err := h.CancelOrder(ctxWithUserID("bad-user"), &pb.CancelOrderRequest{Id: primitive.NewObjectID().Hex()})
+	require.Error(t, err)
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestCancelOrderReturnsNotFoundWhenOrderMissing(t *testing.T) {
+	h := newHandlerWithStore(handlerTestStore{
+		getOrderByIDFn: func(primitive.ObjectID) (*models.Order, error) {
+			return nil, mongo.ErrNoDocuments
+		},
+	})
+
+	_, err := h.CancelOrder(ctxWithUserID(uuid.NewString()), &pb.CancelOrderRequest{Id: primitive.NewObjectID().Hex()})
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
+}
+
+func TestCancelOrderReturnsInternalForUnexpectedError(t *testing.T) {
+	h := newHandlerWithStore(handlerTestStore{
+		getOrderByIDFn: func(primitive.ObjectID) (*models.Order, error) {
+			return nil, errors.New("db failure")
+		},
+	})
+
+	_, err := h.CancelOrder(ctxWithUserID(uuid.NewString()), &pb.CancelOrderRequest{Id: primitive.NewObjectID().Hex()})
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+}
+
+func TestCancelOrderReturnsCancelledResponse(t *testing.T) {
+	customerID := uuid.New()
+	orderID := primitive.NewObjectID()
+	h := newHandlerWithStore(handlerTestStore{
+		getOrderByIDFn: func(id primitive.ObjectID) (*models.Order, error) {
+			return &models.Order{ID: id, CustomerID: customerID}, nil
+		},
+		cancelOrderFn: func(id primitive.ObjectID) error {
+			assert.Equal(t, orderID, id)
+			return nil
+		},
+	})
+
+	res, err := h.CancelOrder(ctxWithUserID(customerID.String()), &pb.CancelOrderRequest{Id: orderID.Hex()})
+	require.NoError(t, err)
+	assert.True(t, res.IsCancelled)
 }

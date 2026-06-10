@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ecomm-micro-org/orders-service/models"
+	"github.com/ecomm-micro-org/orders-service/pb"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/models"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )

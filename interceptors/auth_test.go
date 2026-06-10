@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	internalauth "github.com/risbern21/runaway/orders-service/internal/auth"
+	internalauth "github.com/ecomm-micro-org/orders-service/internal/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

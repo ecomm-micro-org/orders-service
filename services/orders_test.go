@@ -1,17 +1,14 @@
 package services
 
 import (
-	"context"
 	"errors"
 	"testing"
 
+	"github.com/ecomm-micro-org/orders-service/models"
 	"github.com/google/uuid"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"google.golang.org/grpc/metadata"
 )
 
 type serviceTestStore struct {
@@ -73,26 +70,7 @@ func (m serviceTestStore) CancelOrder(id primitive.ObjectID) error {
 	return nil
 }
 
-type serviceOrdersStream struct {
-	ctx     context.Context
-	sent    []*pb.GetOrdersByCustomerIDResponse
-	sendErr error
-}
-
-func (s *serviceOrdersStream) Send(res *pb.GetOrdersByCustomerIDResponse) error {
-	if s.sendErr != nil {
-		return s.sendErr
-	}
-	s.sent = append(s.sent, res)
-	return nil
-}
-
-func (s *serviceOrdersStream) SetHeader(metadata.MD) error  { return nil }
-func (s *serviceOrdersStream) SendHeader(metadata.MD) error { return nil }
-func (s *serviceOrdersStream) SetTrailer(metadata.MD)       {}
-func (s *serviceOrdersStream) Context() context.Context     { return s.ctx }
-func (s *serviceOrdersStream) SendMsg(any) error            { return nil }
-func (s *serviceOrdersStream) RecvMsg(any) error            { return nil }
+// GetOrderByID
 
 func TestGetOrderByIDReturnsMappedResponse(t *testing.T) {
 	customerID := uuid.New()
@@ -148,6 +126,8 @@ func TestGetOrderByIDRejectsUnauthorizedUser(t *testing.T) {
 	assert.EqualError(t, err, "you do not have authorization to access this resource")
 }
 
+// GetOrdersByCustomerID (unary)
+
 func TestGetOrdersByCustomerIDPropagatesStoreError(t *testing.T) {
 	expectedErr := errors.New("store failed")
 	svc := &OrderService{store: serviceTestStore{
@@ -156,12 +136,12 @@ func TestGetOrdersByCustomerIDPropagatesStoreError(t *testing.T) {
 		},
 	}}
 
-	err := svc.GetOrdersByCustomerID(uuid.New(), &serviceOrdersStream{ctx: context.Background()})
+	_, err := svc.GetOrdersByCustomerID(uuid.New())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, expectedErr)
 }
 
-func TestGetOrdersByCustomerIDStreamsEachOrder(t *testing.T) {
+func TestGetOrdersByCustomerIDReturnsMappedOrders(t *testing.T) {
 	customerID := uuid.New()
 	firstID := primitive.NewObjectID()
 	secondID := primitive.NewObjectID()
@@ -174,28 +154,28 @@ func TestGetOrdersByCustomerIDStreamsEachOrder(t *testing.T) {
 			}, nil
 		},
 	}}
-	stream := &serviceOrdersStream{ctx: context.Background()}
 
-	err := svc.GetOrdersByCustomerID(customerID, stream)
+	res, err := svc.GetOrdersByCustomerID(customerID)
 	require.NoError(t, err)
-	require.Len(t, stream.sent, 2)
-	assert.Equal(t, firstID.Hex(), stream.sent[0].Id)
-	assert.Equal(t, secondID.Hex(), stream.sent[1].Id)
-	assert.Equal(t, "USD", stream.sent[1].Currency)
+	require.Len(t, res.Orders, 2)
+	assert.Equal(t, firstID.Hex(), res.Orders[0].Id)
+	assert.Equal(t, secondID.Hex(), res.Orders[1].Id)
+	assert.Equal(t, "USD", res.Orders[1].Currency)
 }
 
-func TestGetOrdersByCustomerIDReturnsSendError(t *testing.T) {
-	expectedErr := errors.New("send failed")
+func TestGetOrdersByCustomerIDReturnsEmptyOrdersWhenNoneExist(t *testing.T) {
 	svc := &OrderService{store: serviceTestStore{
 		getOrdersByCustomerIDFn: func(uuid.UUID) ([]models.Order, error) {
-			return []models.Order{{ID: primitive.NewObjectID(), CustomerID: uuid.New()}}, nil
+			return []models.Order{}, nil
 		},
 	}}
 
-	err := svc.GetOrdersByCustomerID(uuid.New(), &serviceOrdersStream{ctx: context.Background(), sendErr: expectedErr})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, expectedErr)
+	res, err := svc.GetOrdersByCustomerID(uuid.New())
+	require.NoError(t, err)
+	assert.Empty(t, res.Orders)
 }
+
+// UpdateDeliveryAddress
 
 func TestUpdateDeliveryAddressPropagatesGetOrderError(t *testing.T) {
 	expectedErr := errors.New("lookup failed")
@@ -243,6 +223,8 @@ func TestUpdateDeliveryAddressDelegatesToStore(t *testing.T) {
 	assert.True(t, called)
 }
 
+// UpdatePaymentStatus
+
 func TestUpdatePaymentStatusDelegatesToStore(t *testing.T) {
 	orderID := primitive.NewObjectID()
 	called := false
@@ -260,6 +242,8 @@ func TestUpdatePaymentStatusDelegatesToStore(t *testing.T) {
 	assert.True(t, called)
 }
 
+// UpdateDeliveryStatus
+
 func TestUpdateDeliveryStatusDelegatesToStore(t *testing.T) {
 	orderID := primitive.NewObjectID()
 	called := false
@@ -276,6 +260,8 @@ func TestUpdateDeliveryStatusDelegatesToStore(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, called)
 }
+
+// CancelOrder
 
 func TestCancelOrderPropagatesLookupError(t *testing.T) {
 	expectedErr := errors.New("lookup failed")

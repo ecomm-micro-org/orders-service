@@ -9,17 +9,17 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/ecomm-micro-org/orders-service/api"
+	"github.com/ecomm-micro-org/orders-service/db"
+	"github.com/ecomm-micro-org/orders-service/interceptors"
+	"github.com/ecomm-micro-org/orders-service/internal/auth"
+	"github.com/ecomm-micro-org/orders-service/internal/config"
+	kafkaProducer "github.com/ecomm-micro-org/orders-service/internal/kafka"
+	"github.com/ecomm-micro-org/orders-service/internal/messaging"
+	"github.com/ecomm-micro-org/orders-service/pb"
+	"github.com/ecomm-micro-org/orders-service/services"
+	"github.com/ecomm-micro-org/orders-service/store"
 	"github.com/razorpay/razorpay-go"
-	"github.com/risbern21/runaway/orders-service/api"
-	"github.com/risbern21/runaway/orders-service/db"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/interceptors"
-	"github.com/risbern21/runaway/orders-service/internal/auth"
-	"github.com/risbern21/runaway/orders-service/internal/config"
-	kafkaProducer "github.com/risbern21/runaway/orders-service/internal/kafka"
-	"github.com/risbern21/runaway/orders-service/internal/messaging"
-	"github.com/risbern21/runaway/orders-service/services"
-	"github.com/risbern21/runaway/orders-service/store"
 	"github.com/segmentio/kafka-go"
 	"github.com/slack-go/slack"
 	"go.uber.org/zap"
@@ -108,7 +108,7 @@ func runServer(ctx context.Context, grpcServer *grpc.Server) error {
 	serverErr := make(chan error, 1)
 
 	go func() {
-		infoLogger.Sugar().Infoln("products service running on port :42067")
+		infoLogger.Sugar().Infoln("orders service running on port :42067")
 		lis, err := net.Listen("tcp", ":42067")
 		if err != nil {
 			infoLogger.Sugar().Fatalf("unable to listen on port :42067\n")

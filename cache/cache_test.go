@@ -3,8 +3,8 @@ package cache
 import (
 	"testing"
 
+	"github.com/ecomm-micro-org/orders-service/internal/config"
 	"github.com/redis/go-redis/v9"
-	"github.com/risbern21/runaway/orders-service/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

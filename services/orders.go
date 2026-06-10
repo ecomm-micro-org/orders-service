@@ -8,15 +8,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ecomm-micro-org/orders-service/internal/kafka"
+	"github.com/ecomm-micro-org/orders-service/internal/messaging"
+	"github.com/ecomm-micro-org/orders-service/models"
+	"github.com/ecomm-micro-org/orders-service/pb"
+	"github.com/ecomm-micro-org/orders-service/store"
 	"github.com/google/uuid"
 	"github.com/razorpay/razorpay-go"
-	"github.com/risbern21/runaway/orders-service/gen/pb"
-	"github.com/risbern21/runaway/orders-service/internal/kafka"
-	"github.com/risbern21/runaway/orders-service/internal/messaging"
-	"github.com/risbern21/runaway/orders-service/models"
-	"github.com/risbern21/runaway/orders-service/store"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"google.golang.org/grpc"
 )
 
 type OrderService struct {
@@ -131,14 +130,16 @@ func (o *OrderService) GetOrderByID(id primitive.ObjectID, userID uuid.UUID) (*p
 	return res, nil
 }
 
-func (o *OrderService) GetOrdersByCustomerID(userID uuid.UUID, stream grpc.ServerStreamingServer[pb.GetOrdersByCustomerIDResponse]) error {
+func (o *OrderService) GetOrdersByCustomerID(userID uuid.UUID) (*pb.GetOrdersByCustomerIDResponse, error) {
 	orders, err := o.store.GetOrdersByCustomerID(userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	res := &pb.GetOrdersByCustomerIDResponse{}
+
 	for _, v := range orders {
-		r := &pb.GetOrdersByCustomerIDResponse{}
+		r := &pb.OrderResponse{}
 
 		r.Id = v.ID.Hex()
 		r.CustomerId = v.CustomerID.String()
@@ -150,12 +151,10 @@ func (o *OrderService) GetOrdersByCustomerID(userID uuid.UUID, stream grpc.Serve
 		r.IsDelivered = v.IsDelivered
 		r.IsPaid = v.IsPaid
 
-		if err := stream.Send(r); err != nil {
-			return err
-		}
+		res.Orders = append(res.Orders, r)
 	}
 
-	return nil
+	return res, nil
 }
 
 func (o *OrderService) UpdateDeliveryAddress(id primitive.ObjectID, userID uuid.UUID, address string) error {
