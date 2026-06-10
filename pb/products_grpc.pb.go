@@ -32,7 +32,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProductsServiceClient interface {
-	GetProductByID(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetProductByIDResponse, error)
+	GetProductByID(ctx context.Context, in *GetProductByIDRequest, opts ...grpc.CallOption) (*GetProductByIDResponse, error)
 	GetProductsByIDs(ctx context.Context, in *GetProductsByIDsRequest, opts ...grpc.CallOption) (*GetProductsByIDsResponse, error)
 	AddProduct(ctx context.Context, in *AddProductRequest, opts ...grpc.CallOption) (*AddProductResponse, error)
 	CalculateTotalPrice(ctx context.Context, in *CalculateTotalPriceRequest, opts ...grpc.CallOption) (*CalculateTotalPriceResponse, error)
@@ -48,7 +48,7 @@ func NewProductsServiceClient(cc grpc.ClientConnInterface) ProductsServiceClient
 	return &productsServiceClient{cc}
 }
 
-func (c *productsServiceClient) GetProductByID(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetProductByIDResponse, error) {
+func (c *productsServiceClient) GetProductByID(ctx context.Context, in *GetProductByIDRequest, opts ...grpc.CallOption) (*GetProductByIDResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetProductByIDResponse)
 	err := c.cc.Invoke(ctx, ProductsService_GetProductByID_FullMethodName, in, out, cOpts...)
@@ -112,7 +112,7 @@ func (c *productsServiceClient) DeleteProduct(ctx context.Context, in *DeletePro
 // All implementations must embed UnimplementedProductsServiceServer
 // for forward compatibility.
 type ProductsServiceServer interface {
-	GetProductByID(context.Context, *emptypb.Empty) (*GetProductByIDResponse, error)
+	GetProductByID(context.Context, *GetProductByIDRequest) (*GetProductByIDResponse, error)
 	GetProductsByIDs(context.Context, *GetProductsByIDsRequest) (*GetProductsByIDsResponse, error)
 	AddProduct(context.Context, *AddProductRequest) (*AddProductResponse, error)
 	CalculateTotalPrice(context.Context, *CalculateTotalPriceRequest) (*CalculateTotalPriceResponse, error)
@@ -128,7 +128,7 @@ type ProductsServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedProductsServiceServer struct{}
 
-func (UnimplementedProductsServiceServer) GetProductByID(context.Context, *emptypb.Empty) (*GetProductByIDResponse, error) {
+func (UnimplementedProductsServiceServer) GetProductByID(context.Context, *GetProductByIDRequest) (*GetProductByIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProductByID not implemented")
 }
 func (UnimplementedProductsServiceServer) GetProductsByIDs(context.Context, *GetProductsByIDsRequest) (*GetProductsByIDsResponse, error) {
@@ -168,7 +168,7 @@ func RegisterProductsServiceServer(s grpc.ServiceRegistrar, srv ProductsServiceS
 }
 
 func _ProductsService_GetProductByID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(GetProductByIDRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func _ProductsService_GetProductByID_Handler(srv interface{}, ctx context.Contex
 		FullMethod: ProductsService_GetProductByID_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProductsServiceServer).GetProductByID(ctx, req.(*emptypb.Empty))
+		return srv.(ProductsServiceServer).GetProductByID(ctx, req.(*GetProductByIDRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

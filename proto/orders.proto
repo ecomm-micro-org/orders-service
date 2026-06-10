@@ -2,9 +2,10 @@ syntax = "proto3";
 
 package orders;
 
+import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "./gen/pb";
+option go_package = "../pb";
 
 message OrderItem {
   uint64 product_id = 1;
@@ -26,6 +27,10 @@ message GetOrderByIDResponse {
   string currency = 8;
   bool is_paid = 9;
   bool is_delivered = 10;
+}
+
+message GetOrdersByCustomerIDRequest {
+  string customer_id = 1;
 }
 
 message GetOrdersByCustomerIDResponse {
@@ -89,13 +94,45 @@ message CancelOrderResponse {
 }
 
 service OrdersService {
-  rpc GetKey(google.protobuf.Empty) returns (GetKeyResponse);
-  rpc PaymentSuccess(PaymentSuccessRequest) returns (PaymentSuccessResponse);
-  rpc PaymentFailure(PaymentFailureRequest) returns (PaymentFailureResponse);
-  rpc PaymentCallback(google.protobuf.Empty) returns (PaymentCallbackResponse);
-  rpc GetOrderByID(GetOrderByIDRequest) returns (GetOrderByIDResponse);
-  rpc GetOrdersByCustomerID(google.protobuf.Empty) returns (stream GetOrdersByCustomerIDResponse);
-  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
-  rpc UpdateDeliveryAddress(UpdateDeliveryAddressRequest) returns (google.protobuf.Empty);
-  rpc CancelOrder(google.protobuf.Empty) returns (CancelOrderResponse);
+  rpc GetKey(google.protobuf.Empty) returns (GetKeyResponse) {
+    option (google.api.http) = {get: "/orders/key"};
+  }
+
+  rpc PaymentSuccess(PaymentSuccessRequest) returns (PaymentSuccessResponse) {
+    option (google.api.http) = {get: "/orders/payment-success"};
+  }
+
+  rpc PaymentFailure(PaymentFailureRequest) returns (PaymentFailureResponse) {
+    option (google.api.http) = {get: "/orders/payment-failure"};
+  }
+
+  rpc PaymentCallback(google.protobuf.Empty) returns (PaymentCallbackResponse) {
+    option (google.api.http) = {get: "/orders/payment-callback"};
+  }
+
+  rpc GetOrderByID(GetOrderByIDRequest) returns (GetOrderByIDResponse) {
+    option (google.api.http) = {get: "/orders/{id}"};
+  }
+
+  rpc GetOrdersByCustomerID(GetOrdersByCustomerIDRequest) returns (stream GetOrdersByCustomerIDResponse) {
+    option (google.api.http) = {get: "/orders/customer/{customer_id}"};
+  }
+
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {
+    option (google.api.http) = {
+      post: "/orders"
+      body: "*"
+    };
+  }
+
+  rpc UpdateDeliveryAddress(UpdateDeliveryAddressRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      put: "/orders/{id}/delivery-address"
+      body: "*"
+    };
+  }
+
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse) {
+    option (google.api.http) = {delete: "/orders/{id}"};
+  }
 }

@@ -108,7 +108,7 @@ func runServer(ctx context.Context, grpcServer *grpc.Server) error {
 	serverErr := make(chan error, 1)
 
 	go func() {
-		infoLogger.Sugar().Infoln("products service running on port :42067")
+		infoLogger.Sugar().Infoln("orders service running on port :42067")
 		lis, err := net.Listen("tcp", ":42067")
 		if err != nil {
 			infoLogger.Sugar().Fatalf("unable to listen on port :42067\n")
